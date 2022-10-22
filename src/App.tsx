@@ -52,8 +52,11 @@ const getGengarImage = async () => {
   const res = await fetch('https://pokeapi.co/api/v2/pokemon/gengar')
     .then((_) => _.json())
     .catch((e) => console.error(`Errors while fetching: `, e))
-  if (isPokemonResponse(res)) return res
-  else throw new Error('DecodingFailure')
+  if (isPokemonResponse(res)) {
+    return res
+  } else {
+    throw new Error('DecodingFailure')
+  }
 }
 
 type PokemonComponent = {
