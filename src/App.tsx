@@ -1,6 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import reactLogo from './assets/react.svg'
+import { useStableO } from 'fp-ts-react-stable-hooks'
+import * as O from 'fp-ts/Option'
 import './App.css'
+import { pipe } from 'fp-ts/function'
 
 /* 
     Promises by default return Promise<any>.
@@ -11,26 +14,68 @@ import './App.css'
     2. write a small typeguard and validate the response object against it
   */
 
-const getDittoImage = async () =>
-  fetch('https://pokeapi.co/api/v2/pokemon/ditto')
+type PokemonResponse = {
+  readonly name: string
+  readonly sprites: {
+    readonly back_default: string
+    readonly back_shiny: string
+    readonly front_default: string
+    readonly front_shiny: string
+  }
+}
+
+/* 
+  Implementation for 1: 
+    Tell TS to chill as the API will return a PokemonResponse for sure
+*/
+const __first_getGengarImage = async (): Promise<PokemonResponse> =>
+  fetch('https://pokeapi.co/api/v2/pokemon/gengar')
     .then((_) => _.json())
     .catch((e) => console.error(`Errors while fetching: `, e))
 
-const PokemonComponent: React.FC<{ imageUrl: string }> = ({ imageUrl }) => (
+/* 
+  Implementation for 2: 
+    Write a typeguard for the object returned by the Promise.                         
+    If it succeeds then we know for sure that the API retuned what we expected, 
+    otherwise rise a generic DecodingFailure error.
+    Note: I don't think there's an easy way of finding out _which_ field broke the type.
+*/
+const isPokemonResponse = (u: unknown): u is PokemonResponse =>
+  typeof (u as PokemonResponse).name === 'string' &&
+  typeof (u as PokemonResponse).sprites &&
+  typeof (u as PokemonResponse).sprites.back_default === 'string' &&
+  typeof (u as PokemonResponse).sprites.back_shiny === 'string' &&
+  typeof (u as PokemonResponse).sprites.front_shiny === 'string' &&
+  typeof (u as PokemonResponse).sprites.front_default === 'string'
+
+const getGengarImage = async () => {
+  const res = await fetch('https://pokeapi.co/api/v2/pokemon/gengar')
+    .then((_) => _.json())
+    .catch((e) => console.error(`Errors while fetching: `, e))
+  if (isPokemonResponse(res)) return res
+  else throw new Error('DecodingFailure')
+}
+
+type PokemonComponent = {
+  readonly imageUrl: string
+  readonly name: string
+}
+const PokemonComponent: React.FC<PokemonComponent> = ({ imageUrl, name }) => (
   <div className="pokemonImage__container">
     <img className="pokemonImage__content" src={imageUrl} />
     <div className="pokemonNames">
-      <p className="highlight">en: Gengar</p>
-      <p className="highlight">jp: ゲンガー</p>
+      <p className="highlight">EN: {name}</p>
+      <p className="highlight">JP: ゲンガー</p>
     </div>
   </div>
 )
 function App() {
-  const [count, setCount] = useState(0)
-  const [imageUrl, setImageUrl] = useState('')
+  const [pokemonResponse, setPokemonResponse] = useStableO<PokemonResponse>(
+    O.none,
+  )
 
   useEffect(() => {
-    getDittoImage()
+    getGengarImage().then((res) => setPokemonResponse(O.some(res)))
   }, [])
 
   return (
@@ -43,16 +88,18 @@ function App() {
           <img src={reactLogo} className="logo react" alt="React logo" />
         </a>
       </div>
-      <h1>Vite + React</h1>
-      <PokemonComponent imageUrl="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/94.png" />
-      <div className="card">
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
+      {pipe(
+        pokemonResponse,
+        O.match(
+          () => <p className="highlight">Loading or Error</p>,
+          (pokemon) => (
+            <PokemonComponent
+              imageUrl={pokemon.sprites.front_shiny}
+              name={pokemon.name}
+            />
+          ),
+        ),
+      )}
     </div>
   )
 }
