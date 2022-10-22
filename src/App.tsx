@@ -10,11 +10,7 @@ function App() {
       const res = fetch('https://pokeapi.co/api/v2/pokemon/ditto')
       res
         .then((_) => _.json())
-        .then((json) => console.log('its a me a ditto first ', json))
-
-      res
-        .then((_) => _.json())
-        .then((json) => console.log('its a me a ditto second ', json))
+        .then((json) => console.log('its a me a ditto ', json))
     }
     _fetchingStuff()
   }, [])
