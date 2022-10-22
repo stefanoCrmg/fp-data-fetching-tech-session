@@ -1,11 +1,10 @@
-import { useEffect } from 'react'
 import reactLogo from './assets/react.svg'
-import { useStableE } from 'fp-ts-react-stable-hooks'
-import * as E from 'fp-ts/Either'
+import * as E from './fp/Either'
 import './App.css'
 import { pipe } from 'fp-ts/function'
 import * as t from 'io-ts'
-import { formatValidationErrors } from 'io-ts-reporters'
+import { match } from 'ts-pattern'
+import { useQuery } from '@tanstack/react-query'
 
 /* 
   Alternative solution: use a schema library to validate the response of the fetch
@@ -27,14 +26,12 @@ const PokemonResponse = t.readonly(
 )
 type PokemonResponse = t.OutputOf<typeof PokemonResponse>
 
-const getGengarImage = async (): Promise<
-  E.Either<t.Errors, PokemonResponse>
-> => {
+const getGengarImage = async (): Promise<PokemonResponse> => {
   const res = await fetch('https://pokeapi.co/api/v2/pokemon/gengar')
     .then((_) => _.json())
     .catch((e) => console.error(`Errors while fetching: `, e))
 
-  return PokemonResponse.decode(res)
+  return pipe(PokemonResponse.decode(res), E.unsafeUnwrap)
 }
 
 type PokemonComponent = {
@@ -50,15 +47,11 @@ const PokemonComponent: React.FC<PokemonComponent> = ({ imageUrl, name }) => (
     </div>
   </div>
 )
-function App() {
-  const [pokemonResponse, setPokemonResponse] = useStableE<
-    t.Errors,
-    PokemonResponse
-  >(E.left([]))
 
-  useEffect(() => {
-    getGengarImage().then((res) => setPokemonResponse(res))
-  }, [])
+await createOptions()
+
+function App() {
+  const query = useQuery<PokemonResponse>(['pokemon-gengar'], getGengarImage)
 
   return (
     <div className="App">
@@ -70,22 +63,18 @@ function App() {
           <img src={reactLogo} className="logo react" alt="React logo" />
         </a>
       </div>
-      {pipe(
-        pokemonResponse,
-        E.match(
-          (err) => (
-            <p className="highlight">
-              {JSON.stringify(formatValidationErrors(err))}
-            </p>
-          ),
-          (pokemon) => (
-            <PokemonComponent
-              imageUrl={pokemon.sprites.front_shiny}
-              name={pokemon.name}
-            />
-          ),
-        ),
-      )}
+      {match(query)
+        .with({ status: 'loading' }, () => <p className="highlight">Loading</p>)
+        .with({ status: 'error' }, (e) => (
+          <p className="highlight">Error: {JSON.stringify(e.error)}</p>
+        ))
+        .with({ status: 'success' }, ({ data }) => (
+          <PokemonComponent
+            imageUrl={data.sprites.front_shiny}
+            name={data.name}
+          />
+        ))
+        .exhaustive()}
     </div>
   )
 }

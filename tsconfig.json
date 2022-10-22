@@ -32,8 +32,8 @@
     "incremental": true,
     "baseUrl": ".",
     "paths": {
-      "@fp/*": ["./src/fp/*"],
-      "@utils/*": ["./src/utils/*"],      
+      "@fp/*": [".fp/*"],
+      "@utils/*": ["./utils/*"],      
     }
   },
   "include": ["src"],
