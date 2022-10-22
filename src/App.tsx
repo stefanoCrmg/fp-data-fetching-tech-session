@@ -1,62 +1,40 @@
 import { useEffect } from 'react'
 import reactLogo from './assets/react.svg'
-import { useStableO } from 'fp-ts-react-stable-hooks'
-import * as O from 'fp-ts/Option'
+import { useStableE } from 'fp-ts-react-stable-hooks'
+import * as E from 'fp-ts/Either'
 import './App.css'
 import { pipe } from 'fp-ts/function'
+import * as t from 'io-ts'
+import { formatValidationErrors } from 'io-ts-reporters'
 
 /* 
-    Promises by default return Promise<any>.
-    How can we be sure that what we are fetching from the server adheres to the data schema we expect?
-
-    Using only TS we have the following choices:
-    1. write a type for the response object and take a leap of faith that we are doing it right
-    2. write a small typeguard and validate the response object against it
+  Alternative solution: use a schema library to validate the response of the fetch
   */
 
-type PokemonResponse = {
-  readonly name: string
-  readonly sprites: {
-    readonly back_default: string
-    readonly back_shiny: string
-    readonly front_default: string
-    readonly front_shiny: string
-  }
-}
+const PokemonResponse = t.readonly(
+  t.type({
+    name: t.string,
+    sprites: t.readonly(
+      t.type({
+        back_default: t.string,
+        back_shiny: t.string,
+        front_default: t.string,
+        front_shiny: t.string,
+      }),
+    ),
+  }),
+  'PokemonResponse',
+)
+type PokemonResponse = t.OutputOf<typeof PokemonResponse>
 
-/* 
-  Implementation for 1: 
-    Tell TS to chill as the API will return a PokemonResponse for sure
-*/
-const __first_getGengarImage = async (): Promise<PokemonResponse> =>
-  fetch('https://pokeapi.co/api/v2/pokemon/gengar')
-    .then((_) => _.json())
-    .catch((e) => console.error(`Errors while fetching: `, e))
-
-/* 
-  Implementation for 2: 
-    Write a typeguard for the object returned by the Promise.                         
-    If it succeeds then we know for sure that the API retuned what we expected, 
-    otherwise rise a generic DecodingFailure error.
-    Note: I don't think there's an easy way of finding out _which_ field broke the type.
-*/
-const isPokemonResponse = (u: unknown): u is PokemonResponse =>
-  typeof (u as PokemonResponse).name === 'string' &&
-  typeof (u as PokemonResponse).sprites &&
-  typeof (u as PokemonResponse).sprites.back_default === 'string' &&
-  typeof (u as PokemonResponse).sprites.back_shiny === 'string' &&
-  typeof (u as PokemonResponse).sprites.front_shiny === 'string' &&
-  typeof (u as PokemonResponse).sprites.front_default === 'string'
-
-const getGengarImage = async () => {
+const getGengarImage = async (): Promise<
+  E.Either<t.Errors, PokemonResponse>
+> => {
   const res = await fetch('https://pokeapi.co/api/v2/pokemon/gengar')
     .then((_) => _.json())
     .catch((e) => console.error(`Errors while fetching: `, e))
-  if (isPokemonResponse(res)) {
-    return res
-  } else {
-    throw new Error('DecodingFailure')
-  }
+
+  return PokemonResponse.decode(res)
 }
 
 type PokemonComponent = {
@@ -73,12 +51,13 @@ const PokemonComponent: React.FC<PokemonComponent> = ({ imageUrl, name }) => (
   </div>
 )
 function App() {
-  const [pokemonResponse, setPokemonResponse] = useStableO<PokemonResponse>(
-    O.none,
-  )
+  const [pokemonResponse, setPokemonResponse] = useStableE<
+    t.Errors,
+    PokemonResponse
+  >(E.left([]))
 
   useEffect(() => {
-    getGengarImage().then((res) => setPokemonResponse(O.some(res)))
+    getGengarImage().then((res) => setPokemonResponse(res))
   }, [])
 
   return (
@@ -93,8 +72,12 @@ function App() {
       </div>
       {pipe(
         pokemonResponse,
-        O.match(
-          () => <p className="highlight">Loading or Error</p>,
+        E.match(
+          (err) => (
+            <p className="highlight">
+              {JSON.stringify(formatValidationErrors(err))}
+            </p>
+          ),
           (pokemon) => (
             <PokemonComponent
               imageUrl={pokemon.sprites.front_shiny}
