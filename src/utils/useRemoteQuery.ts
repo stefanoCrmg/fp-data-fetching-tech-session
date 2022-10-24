@@ -9,9 +9,11 @@ import {
   useQuery,
   UseQueryOptions,
 } from '@tanstack/react-query'
-import * as RTE from '@fp/ReaderTaskEither'
+import * as RTE from '../fp/ReaderTaskEither'
 import { FrontendEnv } from './frontendEnv'
 import { pipe } from 'fp-ts/function'
+import { GetTokenSilentlyOptions, useAuth0 } from '@auth0/auth0-react'
+import { GetTokenSilentlyVerboseResponse } from '@auth0/auth0-spa-js'
 
 type ErrorWithStaleData<E, A> = {
   readonly error: E
@@ -19,12 +21,22 @@ type ErrorWithStaleData<E, A> = {
   readonly refetch: (options?: RefetchOptions & RefetchQueryFilters<A>) => void
 }
 
+export type AuthenticatedEnv = {
+  getAccessTokenSilently: { (
+    options: GetTokenSilentlyOptions & { detailedResponse: true }
+  ): Promise<GetTokenSilentlyVerboseResponse>;
+  (options?: GetTokenSilentlyOptions): Promise<string>;
+  (options: GetTokenSilentlyOptions): Promise<
+    GetTokenSilentlyVerboseResponse | string
+  >;}
+}
+
 const unwrapQueryFn =
   <T, E, Key extends QueryKey = QueryKey>(
-    r: FrontendEnv,
+    r: FrontendEnv & AuthenticatedEnv,
     queryFn: (
       context: QueryFunctionContext<Key>,
-    ) => RTE.ReaderTaskEither<FrontendEnv, E, T>,
+    ) => RTE.ReaderTaskEither<FrontendEnv & AuthenticatedEnv, E, T>,
   ) =>
   (context: QueryFunctionContext<Key>): Promise<T> =>
     pipe(queryFn(context), RTE.runReaderUnsafeUnwrap(r))
@@ -38,10 +50,11 @@ export const useQueryRemoteData = <
   queryKey: Key,
   queryFn: (
     context: QueryFunctionContext<Key>,
-  ) => RTE.ReaderTaskEither<FrontendEnv, E, QueryFnData>,
+  ) => RTE.ReaderTaskEither<FrontendEnv & AuthenticatedEnv, E, QueryFnData>,
   options?: UseQueryOptions<QueryFnData, E, A, Key>,
 ): RD.RemoteData<ErrorWithStaleData<E, A>, A> => {
-  const _queryFn = unwrapQueryFn(FrontendEnv, queryFn)
+  const { getAccessTokenSilently } = useAuth0()
+  const _queryFn = unwrapQueryFn({...FrontendEnv, getAccessTokenSilently }, queryFn)
   const query = useQuery(queryKey, _queryFn, options)
 
   return match(query)

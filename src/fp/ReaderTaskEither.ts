@@ -1,6 +1,6 @@
-import * as RTE from '@fp/ReaderTaskEither'
-import * as TE from '@fp/TaskEither'
-import * as R from '@fp/Reader'
+import * as RTE from 'fp-ts/ReaderTaskEither'
+import * as TE from './TaskEither'
+import * as R from './Reader'
 
 export const unsafeUnwrap =
   <R, A>(rte: RTE.ReaderTaskEither<R, unknown, A>) =>

@@ -1,10 +1,14 @@
 import reactLogo from './assets/react.svg'
-import * as E from './fp/Either'
+import * as RTE from './fp/ReaderTaskEither'
+import * as TE from './fp/TaskEither'
 import './App.css'
 import { pipe } from 'fp-ts/function'
 import * as t from 'io-ts'
-import { match } from 'ts-pattern'
-import { useQuery } from '@tanstack/react-query'
+import * as RD from '@devexperts/remote-data-ts'
+import { withAuthenticationRequired } from '@auth0/auth0-react'
+import { fetchAndValidate, FetchError, GenericFetchError } from './fetch'
+import { AuthenticatedEnv, useQueryRemoteData } from './utils/useRemoteQuery'
+import { FrontendEnv } from './utils/frontendEnv'
 
 /* 
   Alternative solution: use a schema library to validate the response of the fetch
@@ -25,15 +29,6 @@ const PokemonResponse = t.readonly(
   'PokemonResponse',
 )
 type PokemonResponse = t.OutputOf<typeof PokemonResponse>
-
-const getGengarImage = async (): Promise<PokemonResponse> => {
-  const res = await fetch('https://pokeapi.co/api/v2/pokemon/gengar')
-    .then((_) => _.json())
-    .catch((e) => console.error(`Errors while fetching: `, e))
-
-  return pipe(PokemonResponse.decode(res), E.unsafeUnwrap)
-}
-
 type PokemonComponent = {
   readonly imageUrl: string
   readonly name: string
@@ -48,9 +43,51 @@ const PokemonComponent: React.FC<PokemonComponent> = ({ imageUrl, name }) => (
   </div>
 )
 
-function App() {
-  const query = useQuery<PokemonResponse>(['pokemon-gengar'], getGengarImage)
+const fetchGengar: RTE.ReaderTaskEither<
+  FrontendEnv & AuthenticatedEnv,
+  FetchError,
+  PokemonResponse
+> = RTE.asksTaskEither<
+  FrontendEnv & AuthenticatedEnv,
+  FetchError,
+  PokemonResponse
+>(({ backendURL, getAccessTokenSilently }) =>
+  pipe(
+    TE.tryCatch(
+      () => getAccessTokenSilently(),
+      (e) => GenericFetchError({ message: JSON.stringify(e) }),
+    ),
+    TE.chain((accessToken) =>
+      fetchAndValidate(PokemonResponse, `${backendURL}/pokemon/gengar`, {
+        headers: { authorization: `Bearer ${accessToken}` },
+      }),
+    ),
+  ),
+)
 
+const MainComponent: React.FC = () => {
+  const query = useQueryRemoteData(['pokemon-gengar'], () => fetchGengar)
+
+  return (
+    <div>
+      {pipe(
+        query,
+        RD.fold3(
+          () => <p className="highlight">Loading</p>,
+          (e) => <p className="highlight">Error: {JSON.stringify(e.error)}</p>,
+          (data) => (
+            <PokemonComponent
+              imageUrl={data.sprites.front_shiny}
+              name={data.name}
+            />
+          ),
+        ),
+      )}
+    </div>
+  )
+}
+
+function App() {
   return (
     <div className="App">
       <div>
@@ -61,18 +98,7 @@ function App() {
           <img src={reactLogo} className="logo react" alt="React logo" />
         </a>
       </div>
-      {match(query)
-        .with({ status: 'loading' }, () => <p className="highlight">Loading</p>)
-        .with({ status: 'error' }, (e) => (
-          <p className="highlight">Error: {JSON.stringify(e.error)}</p>
-        ))
-        .with({ status: 'success' }, ({ data }) => (
-          <PokemonComponent
-            imageUrl={data.sprites.front_shiny}
-            name={data.name}
-          />
-        ))
-        .exhaustive()}
+      <div>{withAuthenticationRequired(MainComponent)({})}</div>
     </div>
   )
 }
