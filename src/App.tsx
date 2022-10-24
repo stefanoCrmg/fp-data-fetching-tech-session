@@ -48,8 +48,6 @@ const PokemonComponent: React.FC<PokemonComponent> = ({ imageUrl, name }) => (
   </div>
 )
 
-await createOptions()
-
 function App() {
   const query = useQuery<PokemonResponse>(['pokemon-gengar'], getGengarImage)
 
