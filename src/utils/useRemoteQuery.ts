@@ -15,7 +15,7 @@ import { pipe } from 'fp-ts/function'
 import { GetTokenSilentlyOptions, useAuth0 } from '@auth0/auth0-react'
 import { GetTokenSilentlyVerboseResponse } from '@auth0/auth0-spa-js'
 
-type ErrorWithStaleData<E, A> = {
+export type ErrorWithStaleData<E, A> = {
   readonly error: E
   readonly staleData: O.Option<A>
   readonly refetch: (options?: RefetchOptions & RefetchQueryFilters<A>) => void

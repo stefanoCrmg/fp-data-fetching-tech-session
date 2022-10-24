@@ -7,7 +7,7 @@ import * as t from 'io-ts'
 import * as RD from '@devexperts/remote-data-ts'
 import { withAuthenticationRequired } from '@auth0/auth0-react'
 import { fetchAndValidate, FetchError, GenericFetchError } from './fetch'
-import { AuthenticatedEnv, useQueryRemoteData } from './utils/useRemoteQuery'
+import { AuthenticatedEnv, ErrorWithStaleData, useQueryRemoteData } from './utils/useRemoteQuery'
 import { FrontendEnv } from './utils/frontendEnv'
 
 /* 
@@ -43,11 +43,11 @@ const PokemonComponent: React.FC<PokemonComponent> = ({ imageUrl, name }) => (
   </div>
 )
 
-const fetchGengar: RTE.ReaderTaskEither<
-  FrontendEnv & AuthenticatedEnv,
-  FetchError,
-  PokemonResponse
-> = RTE.asksTaskEither<
+const fetchPokemon = (pokemonName: string): RTE.ReaderTaskEither<
+FrontendEnv & AuthenticatedEnv,
+FetchError,
+PokemonResponse
+> => RTE.asksTaskEither<
   FrontendEnv & AuthenticatedEnv,
   FetchError,
   PokemonResponse
@@ -58,28 +58,43 @@ const fetchGengar: RTE.ReaderTaskEither<
       (e) => GenericFetchError({ message: JSON.stringify(e) }),
     ),
     TE.chain((accessToken) =>
-      fetchAndValidate(PokemonResponse, `${backendURL}/pokemon/gengar`, {
+      fetchAndValidate(PokemonResponse, `${backendURL}/pokemon/${pokemonName}`, {
         headers: { authorization: `Bearer ${accessToken}` },
       }),
     ),
   ),
 )
 
-const MainComponent: React.FC = () => {
-  const query = useQueryRemoteData(['pokemon-gengar'], () => fetchGengar)
+type PokeErrors = ErrorWithStaleData<FetchError, PokemonResponse>
+const fetchMultiplePokemons = (): RD.RemoteData<PokeErrors, [PokemonResponse, PokemonResponse]> => {
+  const gengarQry = useQueryRemoteData(['pokemon-gengar'], () => fetchPokemon('gengar'))
+  const blisseyQry = useQueryRemoteData(['pokemon-blissey'], () => fetchPokemon('blissey'))
 
+  return RD.combine(gengarQry, blisseyQry)
+}
+
+const MainComponent: React.FC = () => {
+  // const query = useQueryRemoteData(['pokemon-gengar'], () => fetchPokemon('gengar'))
+
+  const multiPokemons = fetchMultiplePokemons()
   return (
     <div>
       {pipe(
-        query,
+        multiPokemons,
         RD.fold3(
           () => <p className="highlight">Loading</p>,
           (e) => <p className="highlight">Error: {JSON.stringify(e.error)}</p>,
-          (data) => (
-            <PokemonComponent
-              imageUrl={data.sprites.front_shiny}
-              name={data.name}
+          ([first, second]) => (
+            <div>
+              <PokemonComponent
+              imageUrl={first.sprites.front_shiny}
+              name={first.name}
             />
+            <PokemonComponent
+              imageUrl={second.sprites.front_shiny}
+              name={second.name}
+            />
+            </div>
           ),
         ),
       )}
