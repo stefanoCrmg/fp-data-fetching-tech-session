@@ -15,12 +15,12 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <Auth0Provider
-        domain=""
-        clientId=""
-        audience=""
-        redirectUri={window.location.origin}
-        useRefreshTokens
-      >
+      clientId=""
+      domain=""
+      audience=""
+      redirectUri={window.location.origin}
+      useRefreshTokens
+    >
     <QueryClientProvider client={queryClient}>
       <App />
       <ReactQueryDevtools initialIsOpen />

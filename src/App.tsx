@@ -43,6 +43,40 @@ const PokemonComponent: React.FC<PokemonComponent> = ({ imageUrl, name }) => (
   </div>
 )
 
+
+
+/* Why would anyone ever use an RTE instead of a TE? */
+
+/* Constructing a TE with a dependency */
+const _fetchPokemon = (pokemonName: string) => (backendURL: string) => fetchAndValidate(PokemonResponse, `${backendURL}/pokemon/${pokemonName}`)
+
+type TwoPokemonResponse = {
+  gengar: PokemonResponse,
+  blissey: PokemonResponse
+}
+const twoPokemons: TE.TaskEither<FetchError, TwoPokemonResponse> = pipe(
+  _fetchPokemon('gengar')('https://pokeapi.co/api/v2/'),
+  TE.bindTo('gengar'),
+  TE.apS('blissey', _fetchPokemon('blissey')('https://pokeapi.co/api/v2/')
+))
+
+const esegui = twoPokemons()
+
+/* Constructing an RTE with the depedency stored as Reader context */
+type ContestoEsecuzione = {backendURL: string}
+const _fetchPokemonConRTE = (pokemonName: string): RTE.ReaderTaskEither<ContestoEsecuzione, FetchError, PokemonResponse> => pipe(
+  RTE.ask<ContestoEsecuzione>(),
+  RTE.chainTaskEitherK(({ backendURL}) => fetchAndValidate(PokemonResponse, `${backendURL}/pokemon/${pokemonName}`))
+)
+
+const twoPokemonsConRTE: RTE.ReaderTaskEither<ContestoEsecuzione, FetchError, TwoPokemonResponse> = pipe(
+  _fetchPokemonConRTE('gengar'),
+  RTE.bindTo('gengar'),
+  RTE.apS('blissey', _fetchPokemonConRTE('blissey'))
+)
+
+const eseguiRTE = twoPokemonsConRTE({ backendURL: 'https://pokeapi.co/api/v2/'})()
+
 const fetchPokemon = (pokemonName: string): RTE.ReaderTaskEither<
 FrontendEnv & AuthenticatedEnv,
 FetchError,
